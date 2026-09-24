@@ -1,11 +1,12 @@
-"""Headless sensor node - čte MTF-01P po UART, filtruje a odesílá výsledek
-jako řádky JSON přes UDP. Určeno k běhu přímo na RPi u senzoru.
+"""Headless sensor node - reads MTF-01P over UART, filters it and sends
+the result as JSON lines over UDP. Meant to run directly on the RPi next
+to the sensor.
 
-Použití:
+Usage:
     python3 sensor_node.py --udp-target 192.168.1.50:12345
     python3 sensor_node.py --udp-target 255.255.255.255:12345   # broadcast
 
-Formát UDP zprávy (jeden JSON objekt na řádek, newline-terminated):
+UDP message format (one JSON object per line, newline-terminated):
     {"t":1699999999.123,"vx":0.0,"vy":0.0,"h":15.1,
      "flow_ok":true,"dist_ok":true,"static":true,"q":180,"calib":false}
 """
@@ -36,11 +37,13 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--port', default='/dev/ttyAMA0')
     ap.add_argument('--baud', type=int, default=115200)
-    ap.add_argument('--udp-target', default='127.0.0.1:12345', help='IP:PORT kam posílat, lze broadcast')
-    ap.add_argument('--height', type=float, default=15.0, help='výška senzoru při kalibraci [cm]')
+    ap.add_argument('--udp-target', default='127.0.0.1:12345', help='IP:PORT to send to, broadcast allowed')
+    ap.add_argument('--height', type=float, default=None,
+                     help='reference sensor height during calibration [cm]; '
+                          'if omitted, the initial height is estimated purely from the sensor')
     ap.add_argument('--quality-min', type=int, default=30)
     ap.add_argument('--calib-file', default=DEFAULT_CALIB_FILE)
-    ap.add_argument('--recalibrate', action='store_true', help='ignoruj uloženou kalibraci a změř znovu')
+    ap.add_argument('--recalibrate', action='store_true', help='ignore the saved calibration and measure again')
     args = ap.parse_args()
 
     ip, port = args.udp_target.rsplit(':', 1)
@@ -60,7 +63,10 @@ def main():
     signal.signal(signal.SIGTERM, _sigint)
 
     if est.calibrating:
-        print(f"Kalibrace za klidu na výšce ~{args.height} cm, drž senzor nehybně...")
+        if args.height is None:
+            print("Calibrating at rest, initial height will be estimated from the sensor, hold the sensor still...")
+        else:
+            print(f"Calibrating at rest at height ~{args.height} cm, hold the sensor still...")
     last_print = 0.0
 
     while running:
@@ -74,10 +80,10 @@ def main():
             est_out = est.update(frame)
             if est_out.calibrating:
                 if time.time() - last_print > 0.5:
-                    print(f"\rKalibrace: {est_out.calib_progress*100:5.1f}%", end='', flush=True)
+                    print(f"\rCalibrating: {est_out.calib_progress*100:5.1f}%", end='', flush=True)
                     last_print = time.time()
                 if not est.calibrating:
-                    print(f"\nHOTOVO | dist_offset={est.dist_offset:.2f} cm  "
+                    print(f"\nDONE | dist_offset={est.dist_offset:.2f} cm  "
                           f"bias=({est.bias_x:.1f}, {est.bias_y:.1f})")
                 continue
 
@@ -90,14 +96,14 @@ def main():
             try:
                 sock.sendto((json.dumps(msg) + '\n').encode(), (ip, port))
             except OSError as e:
-                print('UDP send chyba:', e)
+                print('UDP send error:', e)
 
             if time.time() - last_print > 0.5:
                 print(f"\rVx={est_out.vx:6.1f} Vy={est_out.vy:6.1f} cm/s | H={est_out.height_cm:5.1f} cm "
                       f"| q={est_out.flow_quality:3d} | static={est_out.stationary}   ", end='', flush=True)
                 last_print = time.time()
 
-    print("\nUkončuji, ukládám kalibraci...")
+    print("\nShutting down, saving calibration...")
     save_calibration(args.calib_file, est.export_calibration())
     ser.close()
     sock.close()

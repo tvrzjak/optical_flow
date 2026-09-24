@@ -1,14 +1,14 @@
-"""Kalibrační a testovací nástroj pro MTF-01P.
+"""Calibration and test tool for MTF-01P.
 
-Zdroj dat:
-    --serial /dev/ttyAMA0          přímé připojení k senzoru (lokálně na RPi)
-    --udp-raw 12346                příjem raw rámců z raw_forwarder.py (odkudkoli v síti)
+Data source:
+    --serial /dev/ttyAMA0          direct connection to the sensor (locally on the RPi)
+    --udp-raw 12346                receive raw frames from raw_forwarder.py (from anywhere on the network)
 
-Ovládání za běhu:
-    Rekalibrovat   - nové měření nulového bodu (drž senzor nehybně)
-    Reset trajektorie
-    Uložit kalibraci -> calibration.json
-    Slidery         - živé ladění filtru (quality_min, EMA alpha, Hampel k)
+Runtime controls:
+    Recalibrate      - new zero-point measurement (hold the sensor still)
+    Reset trajectory
+    Save calibration -> calibration.json
+    Sliders          - live filter tuning (quality_min, EMA alpha, Hampel k)
 """
 import argparse
 import os
@@ -87,10 +87,12 @@ def udp_raw_reader(udp_port, frame_q: queue.Queue, stop_evt: threading.Event):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     src = ap.add_mutually_exclusive_group(required=True)
-    src.add_argument('--serial', metavar='PORT', help='např. /dev/ttyAMA0')
-    src.add_argument('--udp-raw', metavar='PORT', type=int, help='poslouchej raw rámce z raw_forwarder.py')
+    src.add_argument('--serial', metavar='PORT', help='e.g. /dev/ttyAMA0')
+    src.add_argument('--udp-raw', metavar='PORT', type=int, help='listen for raw frames from raw_forwarder.py')
     ap.add_argument('--baud', type=int, default=115200)
-    ap.add_argument('--height', type=float, default=15.0)
+    ap.add_argument('--height', type=float, default=None,
+                     help='reference sensor height during calibration [cm]; '
+                          'if omitted, the initial height is estimated purely from the sensor')
     ap.add_argument('--calib-file', default=DEFAULT_CALIB_FILE)
     args = ap.parse_args()
 
@@ -172,7 +174,7 @@ def main():
         est.reset_trajectory()
     def on_save(_):
         save_calibration(args.calib_file, est.export_calibration())
-        print(f"Kalibrace uložena do {args.calib_file}")
+        print(f"Calibration saved to {args.calib_file}")
 
     b_recal = Button(fig.add_axes([0.55, 0.06, 0.13, 0.035]), 'Rekalibrovat')
     b_recal.on_clicked(on_recalibrate)
@@ -198,7 +200,9 @@ def main():
             drained += 1
             out = est.update(frame)
             if out.calibrating:
-                txt.set_text(f"KALIBRACE {out.calib_progress*100:5.1f}% - drž senzor nehybně na ~{cfg.target_height_cm:.0f} cm")
+                height_txt = (f"~{cfg.target_height_cm:.0f} cm" if cfg.target_height_cm is not None
+                              else "výšce dle senzoru (auto-odhad)")
+                txt.set_text(f"KALIBRACE {out.calib_progress*100:5.1f}% - drž senzor nehybně na {height_txt}")
                 continue
             if t0 is None:
                 t0 = out.t

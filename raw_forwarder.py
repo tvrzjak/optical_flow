@@ -1,9 +1,9 @@
-"""Lehký forwarder: čte MTF-01P po UART na RPi a validní Micolink rámce
-přeposílá beze změny přes UDP (raw bajty). Slouží k tomu, aby šlo
-calibration_tool.py spouštět na jiném stroji a přitom ladit filtr na živých
-syrových datech (ne až na zpracované rychlosti).
+"""Lightweight forwarder: reads MTF-01P over UART on the RPi and forwards
+valid Micolink frames unchanged over UDP (raw bytes). Lets
+calibration_tool.py run on another machine while tuning the filter on
+live raw data (not just the processed velocity).
 
-Pro provozní nasazení (jen výsledná rychlost) použij sensor_node.py.
+For production deployment (just the resulting velocity) use sensor_node.py.
 """
 import argparse
 import socket
@@ -28,7 +28,7 @@ def main():
 
     ser = serial.Serial(args.port, args.baud, timeout=0.05)
     parser = MicolinkParser()
-    print(f"Přeposílám raw Micolink rámce -> {ip}:{port}")
+    print(f"Forwarding raw Micolink frames -> {ip}:{port}")
 
     n = 0
     try:
@@ -39,7 +39,7 @@ def main():
                     sock.sendto(parser.last_raw_packet, (ip, port))
                     n += 1
                     if n % 50 == 0:
-                        print(f"\r{n} rámců přeposláno", end='', flush=True)
+                        print(f"\r{n} frames forwarded", end='', flush=True)
     except KeyboardInterrupt:
         pass
     finally:

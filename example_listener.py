@@ -1,4 +1,4 @@
-"""Ukázka, jak kdekoliv v síti přijímat rychlost z sensor_node.py - jen socket + json.loads."""
+"""Example of how to receive velocity from sensor_node.py anywhere on the network - just a socket + json.loads."""
 import argparse
 import json
 import socket
@@ -9,7 +9,7 @@ args = ap.parse_args()
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind(('', args.port))
-print(f"Poslouchám na portu {args.port}...")
+print(f"Listening on port {args.port}...")
 
 while True:
     data, addr = sock.recvfrom(1024)

@@ -20,10 +20,18 @@ from dataclasses import dataclass
 
 from mtf01_link import RawFrame
 
+# Nouzová hodnota pro škálování rychlosti výškou - použije se jen tehdy,
+# pokud by height_lock_cm výjimečně ještě nebyl nastaven (prakticky
+# nedosažitelné, viz update()), aby výpočet nikdy nespadl na None.
+_FALLBACK_HEIGHT_CM = 15.0
+
 
 @dataclass
 class Config:
-    target_height_cm: float = 15.0
+    # None = počáteční výška se neurčuje ručně, ale odhadne čistě ze
+    # senzoru (průměr naměřené vzdálenosti během kalibrace se použije
+    # přímo jako referenční výška, dist_offset zůstane 0) - viz update().
+    target_height_cm: float | None = None
     calib_samples: int = 300          # ~3 s při 100 Hz
 
     quality_min: int = 30             # flow_quality [0-255], nastav v kalibr. nástroji
@@ -171,7 +179,11 @@ class FlowEstimator:
                 self._calib_n += 1
             if self._calib_n >= self.cfg.calib_samples:
                 avg_dist = self._calib_sum_dist / self._calib_n
-                self.dist_offset = self.cfg.target_height_cm - avg_dist
+                # Bez ručně zadané referenční výšky (--height) se dist_offset
+                # nedopočítává - naměřená vzdálenost senzoru se bere přímo
+                # jako počáteční výška (čistě senzorový odhad).
+                self.dist_offset = (0.0 if self.cfg.target_height_cm is None
+                                     else self.cfg.target_height_cm - avg_dist)
                 self.bias_x = self._calib_sum_x / self._calib_n
                 self.bias_y = self._calib_sum_y / self._calib_n
                 self.calibrating = False
@@ -221,9 +233,12 @@ class FlowEstimator:
         # vidět skutečné kolísání senzoru. height_m pro škálování rychlosti
         # vychází ze "zamčené" výšky (height_lock_cm) - viz Config a komentář
         # u height_lock_thresh_cm/height_lock_confirm_s.
-        height_cm = (self.ema_dist if self.ema_dist is not None else self.cfg.target_height_cm) + self.dist_offset
-        height_m = ((self.height_lock_cm if self.height_lock_cm is not None else self.cfg.target_height_cm)
-                    + self.dist_offset) / 100.0
+        # Fallback používá height_lock_cm (vždy nastaveno na konci kalibrace,
+        # viz update() výše) místo cfg.target_height_cm - to může být None
+        # (auto-odhad ze senzoru), zatímco height_lock_cm je vždy číslo.
+        fallback_cm = self.height_lock_cm if self.height_lock_cm is not None else _FALLBACK_HEIGHT_CM
+        height_cm = (self.ema_dist if self.ema_dist is not None else fallback_cm) + self.dist_offset
+        height_m = (fallback_cm + self.dist_offset) / 100.0
 
         # ---- rychlost (flow) ----
         if not flow_ok:
