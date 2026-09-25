@@ -6,8 +6,9 @@ Usage:
     python3 sensor_node.py --udp-target 192.168.1.50:12345
     python3 sensor_node.py --udp-target 255.255.255.255:12345   # broadcast
 
-UDP message format (one JSON object per line, newline-terminated):
-    {"t":1699999999.123,"vx":0.0,"vy":0.0,"h":15.1,
+UDP message format (one JSON object per line, newline-terminated;
+t = host time, time_ms = sensor timestamp of the frame):
+    {"t":1699999999.123,"time_ms":123456,"vx":0.0,"vy":0.0,"h":15.1,
      "flow_ok":true,"dist_ok":true,"static":true,"q":180,"calib":false}
 """
 import argparse
@@ -70,7 +71,7 @@ def main():
     last_print = 0.0
 
     while running:
-        chunk = ser.read(64)
+        chunk = ser.read(ser.in_waiting or 1)       # no batching delay (read(64) waited for ~2.5 frames)
         if not chunk:
             continue
         for byte in chunk:
@@ -88,7 +89,7 @@ def main():
                 continue
 
             msg = {
-                't': est_out.t, 'vx': round(est_out.vx, 2), 'vy': round(est_out.vy, 2),
+                't': est_out.t, 'time_ms': frame.time_ms, 'vx': round(est_out.vx, 2), 'vy': round(est_out.vy, 2),
                 'h': round(est_out.height_cm, 2), 'flow_ok': est_out.flow_ok,
                 'dist_ok': est_out.dist_ok, 'static': est_out.stationary,
                 'q': est_out.flow_quality, 'calib': False,

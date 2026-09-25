@@ -59,7 +59,7 @@ def serial_reader(port, baud, frame_q: queue.Queue, stop_evt: threading.Event):
     ser = serial.Serial(port, baud, timeout=0.05)
     parser = MicolinkParser()
     while not stop_evt.is_set():
-        chunk = ser.read(64)
+        chunk = ser.read(ser.in_waiting or 1)
         for byte in chunk:
             frame = parser.feed(byte)
             if frame is not None:

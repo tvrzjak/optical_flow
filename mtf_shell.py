@@ -26,6 +26,8 @@ from pathlib import Path
 DIR = Path(__file__).resolve().parent
 PY = sys.executable or 'python3'
 PROMPT = 'mtf> '
+LOG_SERVICE = 'of-forward'                 # scripts/setup_logging_service.sh
+UART_TOOLS = ('sensor', 'forward', 'calib')
 
 HELP = """\
 Available commands (parameters from docs/MTF01P_manual.md ch. 8 can be
@@ -48,6 +50,11 @@ appended after the syntax below unchanged, e.g. "sensor 1.2.3.4:12345 --quality-
 
   calib-remote <port> [more parameters...]
       calibration/diagnostics from raw_forwarder.py data
+
+  logging start|stop|status
+      background service of-forward (starts at boot): raw frames as broadcast
+      192.168.20.255:12346 for logging through the network TAP. It holds the
+      UART - "logging stop" before sensor/forward/calib, "logging start" after.
 
   help, ?     this help text
   exit, quit  log out
@@ -102,12 +109,31 @@ def _cmd_calib_remote(args):
     return [PY, str(DIR / 'calibration_tool.py'), '--udp-raw', args[0]] + args[1:]
 
 
+def _cmd_logging(args):
+    action = args[0] if args else 'status'
+    if action not in ('start', 'stop', 'restart', 'status'):
+        print('usage: logging start|stop|status')
+        return None
+    if action == 'status':
+        subprocess.call(['systemctl', '--no-pager', '--lines=3', 'status', f'{LOG_SERVICE}.service'])
+    else:
+        rc = subprocess.call(['sudo', '-n', 'systemctl', action, f'{LOG_SERVICE}.service'])
+        print(f'logging {action}: ' + ('ok' if rc == 0 else
+              f'failed (exit {rc}) - is scripts/setup_logging_service.sh installed?'))
+    return None
+
+
+def _logging_active():
+    return subprocess.call(['systemctl', 'is-active', '--quiet', f'{LOG_SERVICE}.service']) == 0
+
+
 COMMANDS = {
     'sensor': _cmd_sensor,
     'forward': _cmd_forward,
     'listen': _cmd_listen,
     'calib': _cmd_calib,
     'calib-remote': _cmd_calib_remote,
+    'logging': _cmd_logging,
 }
 
 
@@ -157,6 +183,10 @@ def main():
         handler = COMMANDS.get(cmd)
         if handler is None:
             print(f"unknown command '{cmd}' - type 'help'")
+            continue
+        if cmd in UART_TOOLS and _logging_active():
+            print("the logging service holds the UART - run 'logging stop' first "
+                  "(and 'logging start' afterwards)")
             continue
 
         try:
