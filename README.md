@@ -160,7 +160,7 @@ Jeden JSON objekt na řádek (newline-terminated), UDP:
 
 ## 9. Vzdálený přístup přes telnet
 
-Cíl: po zapnutí RPi (bez nutnosti cokoliv ručně startovat) stačí RPi
+Po zapnutí RPi stačí
 připojit k PC, spustit `telnet <adresa-rpi>` a **rovnou**, bez jakékoliv
 výzvy k přihlášení, psát zkrácené příkazy typu `forward 192.168.60.5:12345`. Žádná trvalá
 služba senzoru neběží na pozadí sama, spouští se jen to, co je právě
@@ -182,8 +182,7 @@ Skript založí čistý NetworkManager profil `eth0-static` s pevnou IP bez
 závislosti na DHCP (`ipv4.method: manual`) a případné starší/konkurující
 profily pro `eth0` vypne (`autoconnect no`), ať si nekonkurují o stejné
 rozhraní. Adresa/prefix jako parametr je volitelný, výchozí je
-`192.168.60.101/24`. Po spuštění ověř `ip -brief addr show eth0` a po
-rebootu znovu (má zůstat stejná, bez čekání).
+`192.168.60.101/24`.
 
 
 
@@ -204,9 +203,6 @@ Skript:
   (`/usr/local/sbin/mtf-telnet-autologin`), který ihned (dřív, než se
   cokoliv od klienta přečte) přepne na účet `mtfop` a spustí
   `mtf_shell.py` – žádná autentizace, žádný `login:` prompt.
-- Idempotentní – skript lze bezpečně spustit znovu (např. pro opravu
-  stavu, kdy dřív něco selhalo); existující účet/heslo se přitom vždy
-  znovu uzamkne.
 
 ### Připojení z PC
 
@@ -248,10 +244,10 @@ nepoužije – vhodné spíš lokálně na RPi s připojeným monitorem).
 
 ### Plný shell (mimo pevnou sadu příkazů menu)
 
-Telnet od této chvíle dává **jen** menu – bash přes telnet už není k
+Bash přes telnet není k
 dispozici (nemá se přes koho autentizovat). Pro cokoliv mimo pevnou
 sadu příkazů (editace souborů, `git`, ruční ladění, instalace balíčků,
-...) použij SSH pod účtem, pod kterým projekt běží:
+...) nutno použít SSH pod účtem, pod kterým projekt běží:
 
 ```bash
 ssh <username-rpi>@<hostname-rpi>.local
@@ -264,7 +260,7 @@ nainstalován a aktivní).
 
 ### Bezpečnostní poznámka
 
-**Telnet menu nemá žádnou autentizaci ani šifrování.** Kdokoliv, kdo se
+Telnet menu nemá žádnou autentizaci ani šifrování. Kdokoliv, kdo se
 po síti dostane na port 23 tohoto RPi, může bez ověření spouštět
 `sensor`/`forward`/`listen`/`calib` s libovolnými síťovými cíli (typicky
 přesměrovat data senzoru jinam, nebo si je nechat poslat sobě). Účet
@@ -272,7 +268,7 @@ přesměrovat data senzoru jinam, nebo si je nechat poslat sobě). Účet
 jinému – přesto jde jen o spouštění pevně dané sady skriptů projektu, ne
 o obecný shell.
 
-Toto řešení je úmyslně takhle jednoduché a je určeno **jen** pro přímé,
+Toto řešení je úmyslně takhle jednoduché a je určeno jen pro přímé,
 fyzicky důvěryhodné spojení RPi–PC (servisní/laboratorní účel) – nikdy
 ne pro nasazení ve sdílené síti nebo na internetu. Pokud RPi bude
 zároveň připojen k síti s dalšími zařízeními, je dobré zvážit alespoň omezení
@@ -280,7 +276,7 @@ přístupu na port 23 firewallem (např. `ufw`) jen z adresy servisního PC.
 
 ## 10. Známá omezení
 
-- **Trajektorie nemá korekci natočení.** Vx/Vy jsou integrovány přímo v
+- Trajektorie nemá korekci natočení. Vx/Vy jsou integrovány přímo v
   souřadnicích senzoru (osa X = dopředu, Y = do strany dle montáže).
   Pokud se AGV při jízdě otáčí, vykreslená trajektorie neodpovídá
   skutečné dráze v globálním souřadném systému – to vyžaduje fúzi s
