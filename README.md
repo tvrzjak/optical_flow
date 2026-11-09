@@ -360,6 +360,10 @@ Jízda 2 (proti enkodérům):
 
 ![](./docs/agv_zaznam3_prubeh.png)
 
+Místy velká chyba ve vx (např. 24–29 s a 60–69 s) vznikla tam, kde AGV zajelo do míst se špatným
+osvětlením. Senzor je na osvětlení citlivý: při slabém světle přestává spolehlivě sledovat strukturu
+podlahy a rychlost podhodnocuje.
+
 ![](./docs/agv_zaznam3_rmse.png)
 
 ### Mezery
@@ -367,8 +371,8 @@ Jízda 2 (proti enkodérům):
 - **Hrubé rozlišení:** senzor posílá celé pixely za snímek (~8 cm/s ve výšce 0,39 m) a většina
   snímků je nulová. Rychlost dává až průměrování nebo fúze s IMU.
 - **Pod ~20 mm/s** rychlost podhodnocuje.
-- **Výpadky podélné osy:** místy (hlavně při couvání) měří flow jen ~50 % rychlosti. IMU to jen
-  zmírní a kvalita flow to neprozradí.
+- **Citlivost na osvětlení:** ve špatně osvětlených místech měří flow jen ~50 % rychlosti. IMU to
+  jen zmírní a kvalita flow to neprozradí.
 
 ### Co dál
 
@@ -383,3 +387,14 @@ Výsledky jsou zatížené hlavně provizorní montáží. Pro další testy:
 
 S pevnou nízkou montáží a přisvícením se dají čekat **výrazně lepší výsledky**, zejména v podélné
 ose a při pomalé jízdě.
+
+### Posouzení
+
+Na první testy s provizorním uchycením, bez přisvícení a se senzorem zbytečně vysoko považujeme
+výsledky za **velmi dobré**:
+- fúze s IMU dává rychlost prakticky bez zpoždění;
+- chyba je v příčném směru ~6 mm/s a v otáčení ~5 mrad/s;
+- podélný směr je dobrý všude, kde senzor neztratil světlo.
+
+Hlavní slabiny (rozlišení a osvětlení) jsou dané montáží a dají se řešit. Metoda optický flow +
+IMU proto vypadá **slibně** a má smysl ji dál rozvíjet s pevnou nízkou montáží a přisvícením.
