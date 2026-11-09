@@ -162,9 +162,9 @@ Jeden JSON objekt na řádek (newline-terminated), UDP:
 
 Po zapnutí RPi stačí
 připojit k PC, spustit `telnet <adresa-rpi>` a **rovnou**, bez jakékoliv
-výzvy k přihlášení, psát zkrácené příkazy typu `forward 192.168.60.5:12345`. Žádná trvalá
-služba senzoru neběží na pozadí sama, spouští se jen to, co je právě
-potřeba, a po Ctrl+C se lze vrátit zpět a spustit něco jiného.
+výzvy k přihlášení, psát zkrácené příkazy typu `forward 192.168.20.2:12346`. Na pozadí běží
+jen logovací služba `of-forward` (viz níže), ostatní nástroje se spouštějí ručně a po Ctrl+C
+se lze vrátit zpět a spustit něco jiného.
 
 ### Předpoklad: trvalá statická IP na `eth0`
 
@@ -175,16 +175,31 @@ pokud je `eth0` nastavené na "získat IP automaticky" (DHCP), po startu
 („disconnected“), dokud ho někdo ručně neaktivuje. Proto:
 
 ```bash
-sudo bash scripts/setup_eth0_static.sh 192.168.60.101/24
+sudo bash scripts/setup_eth0_static.sh 192.168.20.33/24
 ```
 
 Skript založí čistý NetworkManager profil `eth0-static` s pevnou IP bez
 závislosti na DHCP (`ipv4.method: manual`) a případné starší/konkurující
 profily pro `eth0` vypne (`autoconnect no`), ať si nekonkurují o stejné
-rozhraní. Adresa/prefix jako parametr je volitelný, výchozí je
-`192.168.60.101/24`.
+rozhraní. Adresa/prefix jako parametr je volitelný (výchozí ve skriptu je
+`192.168.60.101/24`); na AGV má RPi adresu **`192.168.20.33/24`**.
 
 
+
+### Logovací služba `of-forward`
+
+```bash
+sudo bash scripts/setup_logging_service.sh            # výchozí cíl 192.168.20.255:12346
+```
+
+Služba se spouští po startu RPi a posílá syrové Micolink rámce senzoru jako broadcast
+(100 Hz). Data tak jde zaznamenat třeba síťovým TAPem, i když RPi není nikam jinam zapojené
+(broadcast nepotřebuje příjemce, `eth0` si drží IP i bez linky). Skript zároveň povolí účtu
+telnet menu tuto službu spouštět a zastavovat.
+
+UART smí mít otevřený jen jeden proces – **před `sensor`, `forward` nebo `calib` je potřeba
+službu zastavit** příkazem `logging stop` a po skončení zase spustit `logging start` (menu na to
+samo upozorní).
 
 ### Jednorázové zapnutí telnetu (na RPi)
 
@@ -209,20 +224,21 @@ Skript:
 ```bash
 telnet <hostname-rpi>.local      # díky avahi/mDNS, např. telnet of.local
 # nebo přímo přes IP:
-telnet 192.168.60.101
+telnet 192.168.20.33
 ```
 
 Spojení se otevře rovnou do menu, bez výzvy k přihlášení:
 
 ```
-MTF-01P – rychlé spouštění nástrojů. Napiš 'help' pro nápovědu.
-mtf> forward 192.168.60.5:12346
-Přeposílám raw Micolink rámce -> 192.168.60.5:12346
+MTF-01P - quick tool launcher. Type 'help' for help.
+mtf> logging stop
+logging stop: ok
+mtf> sensor 192.168.20.2:12345
+Calibrating at rest, initial height will be estimated from the sensor, hold the sensor still...
 ...
 ^C
-mtf> sensor 192.168.60.5:12345
-Kalibrace za klidu, počáteční výška se odhadne ze senzoru, drž senzor nehybně...
-...
+mtf> logging start
+logging start: ok
 mtf> exit
 ```
 
@@ -235,6 +251,7 @@ Přehled příkazů:
 | `listen <port>` | `example_listener.py --port ...` | |
 | `calib [výška_cm]` | `calibration_tool.py --serial /dev/ttyAMA0 [--height ...]` | potřebuje grafické okno (DISPLAY) |
 | `calib-remote <port>` | `calibration_tool.py --udp-raw ...` | |
+| `logging start\|stop\|status` | `systemctl … of-forward` | logovací služba; drží UART |
 | `help`, `?` | – | nápověda |
 | `exit`, `quit` | – | odhlásit |
 
@@ -262,7 +279,7 @@ nainstalován a aktivní).
 
 Telnet menu nemá žádnou autentizaci ani šifrování. Kdokoliv, kdo se
 po síti dostane na port 23 tohoto RPi, může bez ověření spouštět
-`sensor`/`forward`/`listen`/`calib` s libovolnými síťovými cíli (typicky
+`sensor`/`forward`/`listen`/`calib`/`logging` s libovolnými síťovými cíli (typicky
 přesměrovat data senzoru jinam, nebo si je nechat poslat sobě). Účet
 `mtfop`, pod kterým vše běží, nemá heslo a nemá být použit k ničemu
 jinému – přesto jde jen o spouštění pevně dané sady skriptů projektu, ne
@@ -302,13 +319,17 @@ přístupu na port 23 firewallem (např. `ufw`) jen z adresy servisního PC.
 
 ## 12. Reálné testy na AGV
 
-Senzor byl na AGV (mecanum) 0,67 m před středem, 0,03 m vlevo a 0,39 m nad podlahou. Data se
-nahrávala spolu s IMU a enkodéry kol a vyhodnotila se offline proti skutečné rychlosti AGV.
+Jde o **první orientační testy**. Senzor byl na AGV (mecanum) jen provizorně přichycený na
+kartonu, 0,67 m před středem, 0,03 m vlevo a **0,39 m nad podlahou**, bez přisvícení. Uchycení
+bylo hodně nedokonalé: výška senzoru (ToF) za jízdy kolísala o ±3 cm a senzor byl zbytečně vysoko.
+Data se nahrávala spolu s IMU a enkodéry kol a vyhodnotila se offline proti rychlosti z enkodérů.
+
+![](./docs/agv_montaz.jpg)
 
 ### Jak to funguje
 
 - **RPi** posílá po startu samo syrové rámce senzoru jako broadcast `192.168.20.255:12346`
-  (100 Hz, služba `of-forward`). Telnet `logging stop` / `logging start` ji uvolní pro kalibraci.
+  (100 Hz, služba `of-forward`, kap. 9).
 - **Flow → rychlost:** v = flow · výška. Výška je pevná (0,39 m), ToF za jízdy šumí. Osy senzoru se
   převedou do os AGV a každá osa má vlastní měřítko z jednorázové kalibrace.
 - **Fúze s IMU (Kalmanův filtr):**
@@ -319,17 +340,14 @@ nahrávala spolu s IMU a enkodéry kol a vyhodnotila se offline proti skutečné
 
 ### Výsledky
 
-Chyba rychlosti středu AGV (RMSE, vx podélně / vy příčně [mm/s], ω [mrad/s]), jízda do 0,1 m/s:
+Chyba rychlosti středu AGV proti enkodérům kol (RMSE, vx podélně / vy příčně [mm/s],
+ω [mrad/s]), jízda do 0,1 m/s:
 
-| metoda | záznam 2 | záznam 3 (proti enkodérům) | zpoždění |
-|---|---|---|---|
-| flow, průměr 250 ms | 15 / 61 / 89 | 22 / 34 / 45 | ~170 ms |
-| flow + gyro | 15 / 13 / 15 | 23 / 15 / 6 | ~100–150 ms |
-| **flow + IMU (Kalmanův filtr)** | **10 / 9 / 14** | **17 / 6 / 5** | **~10 ms** |
-
-Záznam 2 nemá enkodéry, referencí je trajektorie z lidaru (s koly se shoduje na ~2,5 mm/s).
-
-![](./docs/agv_zaznam2_prubeh.png)
+| metoda | vx / vy / ω | zpoždění |
+|---|---|---|
+| flow, průměr 250 ms | 22 / 34 / 45 | ~170 ms |
+| flow + gyro | 23 / 15 / 6 | ~150 ms |
+| **flow + IMU (Kalmanův filtr)** | **17 / 6 / 5** | **~5 ms** |
 
 ![](./docs/agv_zaznam3_prubeh.png)
 
@@ -343,9 +361,16 @@ Záznam 2 nemá enkodéry, referencí je trajektorie z lidaru (s koly se shoduje
 - **Výpadky podélné osy:** místy (hlavně při couvání) měří flow jen ~50 % rychlosti. IMU to jen
   zmírní a kvalita flow to neprozradí.
 
-### Co doladit
+### Co dál
 
-1. Senzor níž nad podlahu: rozlišení je úměrné výšce (minimum 8 cm).
-2. Přisvítit podlahu a ověřit výpadky na jiném povrchu.
-3. Kalibraci měřítek os udělat na cílové podlaze.
-4. Fúzi s IMU přenést do zařízení místo EMA v `estimator.py`.
+Výsledky jsou zatížené hlavně provizorní montáží. Pro další testy:
+
+1. **Upevnit senzor pevně a výrazně níž nad podlahu.** Rozlišení je úměrné výšce: např. ve 0,10 m by
+   byl krok ~2 cm/s místo ~8 cm/s (minimum senzoru je 8 cm). Pevné uchycení odstraní kolísání výšky.
+2. **Přisvítit podlahu** (rovnoměrné LED kolem senzoru). Pomůže kvalitě flow a výpadkům na hladkých
+   místech.
+3. Kalibraci měřítek os zopakovat na cílové podlaze a fúzi s IMU přenést do zařízení místo EMA v
+   `estimator.py`.
+
+S pevnou nízkou montáží a přisvícením se dají čekat **výrazně lepší výsledky**, zejména v podélné
+ose a při pomalé jízdě.
