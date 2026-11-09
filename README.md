@@ -322,7 +322,8 @@ přístupu na port 23 firewallem (např. `ufw`) jen z adresy servisního PC.
 Jde o **první orientační testy**. Senzor byl na AGV (mecanum) jen provizorně přichycený na
 kartonu, 0,67 m před středem, 0,03 m vlevo a **0,39 m nad podlahou**, bez přisvícení. Uchycení
 bylo hodně nedokonalé: výška senzoru (ToF) za jízdy kolísala o ±3 cm a senzor byl zbytečně vysoko.
-Data se nahrávala spolu s IMU a enkodéry kol a vyhodnotila se offline proti rychlosti z enkodérů.
+Data se nahrávala spolu s IMU, enkodéry kol a lidary a vyhodnotila se offline proti skutečné
+rychlosti AGV.
 
 ![](./docs/agv_montaz.jpg)
 
@@ -340,14 +341,22 @@ Data se nahrávala spolu s IMU a enkodéry kol a vyhodnotila se offline proti ry
 
 ### Výsledky
 
-Chyba rychlosti středu AGV proti enkodérům kol (RMSE, vx podélně / vy příčně [mm/s],
-ω [mrad/s]), jízda do 0,1 m/s:
+Chyba rychlosti středu AGV (RMSE, vx podélně / vy příčně [mm/s], ω [mrad/s]), dvě jízdy do 0,1 m/s:
 
-| metoda | vx / vy / ω | zpoždění |
-|---|---|---|
-| flow, průměr 250 ms | 22 / 34 / 45 | ~170 ms |
-| flow + gyro | 23 / 15 / 6 | ~150 ms |
-| **flow + IMU (Kalmanův filtr)** | **17 / 6 / 5** | **~5 ms** |
+| metoda | jízda 1 (reference: lidar) | jízda 2 (reference: enkodéry kol) | zpoždění |
+|---|---|---|---|
+| flow, průměr 250 ms | 15 / 61 / 89 | 22 / 34 / 45 | ~170 ms |
+| flow + gyro | 15 / 13 / 15 | 23 / 15 / 6 | ~100–150 ms |
+| **flow + IMU (Kalmanův filtr)** | **10 / 9 / 14** | **17 / 6 / 5** | **~5–15 ms** |
+
+V jízdě 1 nebyly zaznamenané enkodéry. Referencí je trajektorie z lidaru, která se s enkodéry
+shoduje na ~2,5 mm/s.
+
+Jízda 1:
+
+![](./docs/agv_zaznam2_prubeh.png)
+
+Jízda 2 (proti enkodérům):
 
 ![](./docs/agv_zaznam3_prubeh.png)
 
