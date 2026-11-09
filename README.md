@@ -109,8 +109,8 @@ Pokud se hodnota kvality dostane pod stanovenou mez, přestane se rychlost brát
 
 `sensor_node.py` i `calibration_tool.py` čtou/zapisují stejný soubor
 `calibration.json` umístěný vedle skriptů. Pokud soubor
-existuje, `sensor_node.py` jej při startu načte a **kalibrační fázi
-přeskočí** – naběhne rovnou do provozního režimu. Nová kalibrace se
+existuje, `sensor_node.py` jej při startu načte a kalibrační fázi
+přeskočí – naběhne rovnou do provozního režimu. Nová kalibrace se
 vynutí přepínačem `--recalibrate`.
 
 
@@ -161,7 +161,7 @@ Jeden JSON objekt na řádek (newline-terminated), UDP:
 ## 9. Vzdálený přístup přes telnet
 
 Po zapnutí RPi stačí
-připojit k PC, spustit `telnet <adresa-rpi>` a **rovnou**, bez jakékoliv
+připojit k PC, spustit `telnet <adresa-rpi>` a rovnou, bez jakékoliv
 výzvy k přihlášení, psát zkrácené příkazy typu `forward 192.168.20.2:12346`. Na pozadí běží
 jen logovací služba `of-forward` (viz níže), ostatní nástroje se spouštějí ručně a po Ctrl+C
 se lze vrátit zpět a spustit něco jiného.
@@ -197,8 +197,8 @@ Služba se spouští po startu RPi a posílá syrové Micolink rámce senzoru ja
 (broadcast nepotřebuje příjemce, `eth0` si drží IP i bez linky). Skript zároveň povolí účtu
 telnet menu tuto službu spouštět a zastavovat.
 
-UART smí mít otevřený jen jeden proces – **před `sensor`, `forward` nebo `calib` je potřeba
-službu zastavit** příkazem `logging stop` a po skončení zase spustit `logging start` (menu na to
+UART smí mít otevřený jen jeden proces – před `sensor`, `forward` nebo `calib` je potřeba
+službu zastavit příkazem `logging stop` a po skončení zase spustit `logging start` (menu na to
 samo upozorní).
 
 ### Jednorázové zapnutí telnetu (na RPi)
@@ -209,9 +209,9 @@ sudo bash scripts/setup_telnet.sh
 
 Skript:
 - nainstaluje telnet server (`inetutils-telnetd`) a zaregistruje ho jako
-  systemd socket (`telnet.socket` na portu 23) s aktivací **při startu
-  systému** – není potřeba nic ručně spouštět po každém rebootu,
-- vytvoří neprivilegovaný účet **`mtfop`** (bez použitelného hesla –
+  systemd socket (`telnet.socket` na portu 23) s aktivací při startu
+  systému – není potřeba nic ručně spouštět po každém rebootu,
+- vytvoří neprivilegovaný účet `mtfop` (bez použitelného hesla –
   `passwd -l`, přihlásit se jím přímo přes ssh/su/konzoli nejde),
 - nakonfiguruje telnetd, aby místo obvyklého `/bin/login` spustil
   `scripts/setup_telnet.sh`-generovaný root-drop wrapper
@@ -255,7 +255,7 @@ Přehled příkazů:
 | `help`, `?` | – | nápověda |
 | `exit`, `quit` | – | odhlásit |
 
-Běžící nástroj se ukončí **Ctrl+C** – vrátí se `mtf>` prompt a jde spustit
+Běžící nástroj se ukončí Ctrl+C – vrátí se `mtf>` prompt a jde spustit
 další příkaz (`calib` potřebuje X displej, takže se přes telnet typicky
 nepoužije – vhodné spíš lokálně na RPi s připojeným monitorem).
 
@@ -319,8 +319,8 @@ přístupu na port 23 firewallem (např. `ufw`) jen z adresy servisního PC.
 
 ## 12. Reálné testy na AGV
 
-Jde o **první orientační testy**. Senzor byl na AGV (mecanum) jen provizorně přichycený na
-kartonu, 0,67 m před středem, 0,03 m vlevo a **0,39 m nad podlahou**, bez přisvícení. Uchycení
+Jde o první orientační testy. Senzor byl na AGV (mecanum) jen provizorně přichycený na
+kartonu, 0,67 m před středem, 0,03 m vlevo a 0,38 m nad podlahou, bez přisvícení. Uchycení
 bylo hodně nedokonalé: výška senzoru (ToF) za jízdy kolísala o ±3 cm a senzor byl zbytečně vysoko.
 Data se nahrávala spolu s IMU, enkodéry kol a lidary a vyhodnotila se offline proti skutečné
 rychlosti AGV.
@@ -329,9 +329,9 @@ rychlosti AGV.
 
 ### Jak to funguje
 
-- **RPi** posílá po startu samo syrové rámce senzoru jako broadcast `192.168.20.255:12346`
+- **RPi** posílá po startu syrové rámce senzoru jako broadcast `192.168.20.255:12346`
   (100 Hz, služba `of-forward`, kap. 9).
-- **Flow → rychlost:** v = flow · výška. Výška je pevná (0,39 m), ToF za jízdy šumí. Osy senzoru se
+- **Flow → rychlost:** v = flow · výška. Osy senzoru se
   převedou do os AGV a každá osa má vlastní měřítko z jednorázové kalibrace.
 - **Fúze s IMU (Kalmanův filtr):**
   - gyro odečte rychlost od otáčení podvozku, protože senzor je daleko od středu;
@@ -349,52 +349,49 @@ Chyba rychlosti středu AGV (RMSE, vx podélně / vy příčně [mm/s], ω [mrad
 | flow + gyro | 15 / 13 / 15 | 23 / 15 / 6 | ~100–150 ms |
 | **flow + IMU (Kalmanův filtr)** | **10 / 9 / 14** | **17 / 6 / 5** | **~5–15 ms** |
 
-V jízdě 1 nebyly zaznamenané enkodéry. Referencí je trajektorie z lidaru, která se s enkodéry
-shoduje na ~2,5 mm/s.
-
 Jízda 1:
 
 ![](./docs/agv_zaznam2_prubeh.png)
 
-Jízda 2 (proti enkodérům):
+Jízda 2:
 
 ![](./docs/agv_zaznam3_prubeh.png)
 
 Místy velká chyba ve vx (např. 24–29 s a 60–69 s) vznikla tam, kde AGV zajelo do míst se špatným
 osvětlením. Senzor je na osvětlení citlivý: při slabém světle přestává spolehlivě sledovat strukturu
-podlahy a rychlost podhodnocuje.
+podlahy.
 
 ![](./docs/agv_zaznam3_rmse.png)
 
 ### Mezery
 
-- **Hrubé rozlišení:** senzor posílá celé pixely za snímek (~8 cm/s ve výšce 0,39 m) a většina
-  snímků je nulová. Rychlost dává až průměrování nebo fúze s IMU.
-- **Pod ~20 mm/s** rychlost podhodnocuje.
+- **Hrubé rozlišení:** senzor posílá celé pixely za snímek (~8 cm/s ve výšce 0,39 m) a velká část
+  pixelů je nulová. Rychlost dává až průměrování nebo fúze s IMU.
+- **Pod ~20 mm/s** rychlost silně podhodnocuje.
 - **Citlivost na osvětlení:** ve špatně osvětlených místech měří flow jen ~50 % rychlosti. IMU to
-  jen zmírní a kvalita flow to neprozradí.
+  jen zmírní a ukazatel kvality flow to nedetekuje.
 
 ### Co dál
 
 Výsledky jsou zatížené hlavně provizorní montáží. Pro další testy:
 
-1. **Upevnit senzor pevně a výrazně níž nad podlahu.** Rozlišení je úměrné výšce: např. ve 0,10 m by
-   byl krok ~2 cm/s místo ~8 cm/s (minimum senzoru je 8 cm). Pevné uchycení odstraní kolísání výšky.
-2. **Přisvítit podlahu** (rovnoměrné LED kolem senzoru). Pomůže kvalitě flow a výpadkům na hladkých
+1. **Upevnit senzor pevně a výrazně níž nad podlahu.** Rozlišení je úměrné výšce: např. v 0,10 m by
+   byl krok ~2 cm/s místo ~8 cm/s (minimum senzoru je 8 cm nad podlahou). Pevné uchycení odstraní kolísání výšky.
+2. **Přisvítit podlahu** (ideálně rovnoměrné LED kolem senzoru). Pomůže kvalitě flow a výpadkům na hladkých
    místech.
 3. Kalibraci měřítek os zopakovat na cílové podlaze a fúzi s IMU přenést do zařízení místo EMA v
    `estimator.py`.
 
-S pevnou nízkou montáží a přisvícením se dají čekat **výrazně lepší výsledky**, zejména v podélné
-ose a při pomalé jízdě.
+S pevnou nízkou montáží a přisvícením se dají čekat výrazně lepší výsledky, zejména v podélné
+ose.
 
 ### Posouzení
 
-Na první testy s provizorním uchycením, bez přisvícení a se senzorem zbytečně vysoko považujeme
-výsledky za **velmi dobré**:
+Na první testy s provizorním uchycením, bez přisvícení a se senzorem zbytečně vysoko považuji
+výsledky za velmi dobré:
 - fúze s IMU dává rychlost prakticky bez zpoždění;
 - chyba je v příčném směru ~6 mm/s a v otáčení ~5 mrad/s;
 - podélný směr je dobrý všude, kde senzor neztratil světlo.
 
 Hlavní slabiny (rozlišení a osvětlení) jsou dané montáží a dají se řešit. Metoda optický flow +
-IMU proto vypadá **slibně** a má smysl ji dál rozvíjet s pevnou nízkou montáží a přisvícením.
+IMU proto vypadá slibně a má smysl ji dál rozvíjet.
