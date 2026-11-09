@@ -302,112 +302,50 @@ přístupu na port 23 firewallem (např. `ufw`) jen z adresy servisního PC.
 
 ## 12. Reálné testy na AGV
 
-Senzor byl namontovaný na AGV s mecanum koly a jeho data se zaznamenávala společně s IMU (ICM42688,
-BMI270, LSM6DSV80), enkodéry kol a lidary přes síťový TAP s HW časem. Vyhodnocení proběhlo offline,
-odhad rychlosti se porovnával se skutečnou rychlostí AGV.
+Senzor byl na AGV (mecanum) 0,67 m před středem, 0,03 m vlevo a 0,39 m nad podlahou. Data se
+nahrávala spolu s IMU a enkodéry kol a vyhodnotila se offline proti skutečné rychlosti AGV.
 
-### 12.1 Zapojení a záznam
+### Jak to funguje
 
-- **Montáž:** 0,67 m před středem AGV, 0,03 m vlevo, 0,39 m nad podlahou.
-  - Osy senzoru jsou vůči AGV prohozené: x AGV = y senzoru, y AGV = x senzoru.
-  - Zbytkové natočení je −1,2°.
-- **RPi** má IP 192.168.20.33. Služba `of-forward` (`scripts/setup_logging_service.sh`) se spustí po
-  startu a posílá **syrové Micolink rámce** na `192.168.20.255:12346` (100 Hz, ~22 kbit/s).
-  - Broadcast nepotřebuje žádného příjemce, stačí linka.
-  - `eth0` si drží IP i bez linky.
-  - Pro kalibraci nebo `sensor_node` se služba zastaví z telnetu příkazem `logging stop` a pak se
-    znovu spustí `logging start`.
-  - Čtení UART bere vždy jen to, co je v bufferu: rámce chodí rovnoměrně po 10 ms, jitter < 0,5 ms.
-- **TAP Beckhoff ET2000:** port, do kterého je RPi zapojené (např. X2.0 IN), nahodí linku jen tehdy,
-  když je na protějším portu páru (X2.0 OUT) také zapojené zařízení s linkou, třeba switch AGV.
-  Bez toho RPi nic nepošle.
+- **RPi** posílá po startu samo syrové rámce senzoru jako broadcast `192.168.20.255:12346`
+  (100 Hz, služba `of-forward`). Telnet `logging stop` / `logging start` ji uvolní pro kalibraci.
+- **Flow → rychlost:** v = flow · výška. Výška je pevná (0,39 m), ToF za jízdy šumí. Osy senzoru se
+  převedou do os AGV a každá osa má vlastní měřítko z jednorázové kalibrace.
+- **Fúze s IMU (Kalmanův filtr):**
+  - gyro odečte rychlost od otáčení podvozku, protože senzor je daleko od středu;
+  - akcelerometr drží průběh rychlosti mezi hrubými vzorky flow a dorovná zpoždění senzoru (~37 ms);
+  - když flow dlouhodobě nesouhlasí s IMU, filtr mu dočasně méně věří;
+  - v klidu se rychlost nuluje (ZUPT).
 
-### 12.2 Zpracování a fúze s IMU
+### Výsledky
 
-Filtrovaný výstup `sensor_node.py` se pro testy nepoužíval. EMA a medián v něm přidávají zpoždění
-a rotaci podvozku neřeší. Syrová data se zpracovala takto:
+Chyba rychlosti středu AGV (RMSE, vx podélně / vy příčně [mm/s], ω [mrad/s]), jízda do 0,1 m/s:
 
-1. **Flow → rychlost bodu senzoru:** v = flow [cm/s při 1 m] · 0,01 · výška.
-   - Výška je **pevná 0,39 m**. ToF za jízdy šumí ±3 cm, což by se přeneslo do měřítka.
-   - Každá osa má vlastní měřítko: x AGV ×1,14, y AGV ×0,98. Kalibrace proběhla jednou proti
-     referenci a na dalších záznamech se použila beze změny.
-2. **Rameno senzoru:** rychlost středu AGV = v_senzor − ω × r, kde ω je z gyra.
-   - Při otáčení je to dominantní člen: 0,1 rad/s · 0,67 m = 67 mm/s.
-   - Bez gyra je chyba vy při otáčení 90–150 mm/s.
-3. **Kalmanův filtr s IMU:** stav [vx, vy, bias akcelerometru].
-   - Predikce akcelerometrem, přepočteným do středu AGV přes polohu IMU.
-   - Měření je flow v bodě senzoru. Šum měření = kvantizace (krok²/12) + 0,05 m/s.
-   - **Bez odmítání odlehlých hodnot.** Flow je kvantovaný (0, 1, 2… px) a odmítání by
-     systematicky ořezávalo vyšší hodnoty, takže by rychlost vycházela o 20–30 % nižší.
-   - **Adaptivní šum:** když flow dlouhodobě nesouhlasí s IMU (klouzavý průměr normalizované
-     inovace přes 0,5 s), filtr mu dočasně méně věří.
-   - **ZUPT:** flow téměř nulový a IMU v klidu → v = 0, doučení biasu gyra.
-   - **Výstup „now“:** stav se IMU predikuje do okamžiku příjmu rámce, čímž se dorovná vlastní
-     zpoždění senzoru ~37 ms.
-
-### 12.3 Výsledky
-
-RMSE rychlosti středu AGV (vx podélně, vy příčně [mm/s], ω [mrad/s]). Zpoždění je posun, při
-kterém odhad nejlépe sedí s referencí.
-
-| metoda | záznam 2 (reference: lidar) | záznam 3 (reference: enkodéry kol) | zpoždění |
+| metoda | záznam 2 | záznam 3 (proti enkodérům) | zpoždění |
 |---|---|---|---|
-| flow bez IMU, průměr 250 ms | 15,4 / 60,6 / 88,9 | 22,3 / 34,3 / 44,6 | 165–170 ms |
-| flow + gyro, průměr 250 ms | 15,4 / 13,2 / 15,0 | 22,8 / 14,9 / 6,2 | 95–155 ms |
-| **flow + IMU, Kalmanův filtr** | **10,2 / 8,6 / 14,0** | **16,6 / 6,1 / 4,8** | **~5–15 ms** |
-| lidar + IMU (pro srovnání) | 7,2 / 8,3 / 16,2 | 6,2 / 4,9 / 4,9 | 25–35 ms |
+| flow, průměr 250 ms | 15 / 61 / 89 | 22 / 34 / 45 | ~170 ms |
+| flow + gyro | 15 / 13 / 15 | 23 / 15 / 6 | ~100–150 ms |
+| **flow + IMU (Kalmanův filtr)** | **10 / 9 / 14** | **17 / 6 / 5** | **~10 ms** |
 
-- Rychlost jízdy byla do 0,1 m/s, otáčení do 0,5 rad/s.
-- Záznam 2 nemá enkodéry. Referencí je trajektorie z lidaru, která se s koly shoduje na ~2,5 mm/s.
-- ω z gyra má na záznamu 2 chybu 14 mrad/s kvůli rychlé rotaci 0,5 rad/s na konci, kterou vyhlazená
-  reference nestíhá.
-
-Záznam 2, celý průběh (černě reference, modře flow + IMU, oranžově flow + gyro, zeleně lidar):
+Záznam 2 nemá enkodéry, referencí je trajektorie z lidaru (s koly se shoduje na ~2,5 mm/s).
 
 ![](./docs/agv_zaznam2_prubeh.png)
 
-Záznam 3 proti enkodérům kol:
-
 ![](./docs/agv_zaznam3_prubeh.png)
-
-Detail jízdy. Flow + IMU drží rychlost bez zpoždění, průměrovaný flow šumí a je zpožděný:
-
-![](./docs/agv_zaznam3_detail.png)
-
-Srovnání chyb všech variant (šedě metody z lidaru pro srovnání):
 
 ![](./docs/agv_zaznam3_rmse.png)
 
-Odhad proti enkodérům. Svislé „pruhy“ u vx = −0,1 m/s jsou úseky, kde flow při couvání měří méně:
+### Mezery
 
-![](./docs/agv_zaznam3_scatter.png)
+- **Hrubé rozlišení:** senzor posílá celé pixely za snímek (~8 cm/s ve výšce 0,39 m) a většina
+  snímků je nulová. Rychlost dává až průměrování nebo fúze s IMU.
+- **Pod ~20 mm/s** rychlost podhodnocuje.
+- **Výpadky podélné osy:** místy (hlavně při couvání) měří flow jen ~50 % rychlosti. IMU to jen
+  zmírní a kvalita flow to neprozradí.
 
-### 12.4 Zjištěné vlastnosti a mezery
+### Co doladit
 
-- **Kvantování po celých pixelech:** `flow_vel` jsou násobky 20 cm/s při 1 m, tj. krok ~7,8 cm/s
-  ve výšce 0,39 m.
-  - 70 % rámců je nulových a jednotlivý rámec rychlost prakticky neurčuje.
-  - Rychlost vznikne až průměrováním (zpoždění) nebo fúzí s IMU.
-- **Mrtvá zóna:** pod ~20 mm/s senzor rychlost podhodnocuje (~0,6×), zbytky pixelu se zřejmě ztrácejí.
-- **Výpadky podélné osy (vx):** v některých úsecích, typicky při couvání 0,1 m/s, měří flow jen
-  ~50 %. Je to vázané na místo a směr jízdy, příčná osa tím trpí výrazně méně.
-  - `flow_quality` to předem neprozradí (rozdíl 101 proti 105).
-  - Fúze s IMU chybu tlumí, ale neodstraní, protože akcelerometr pomalou chybu rychlosti nepozná.
-- **Asymetrie os:** osa y senzoru měří o ~14 % méně než osa x. Kalibrace per osa to opraví.
-- **Časování:** flow je o ~37 ms pozadu za skutečným pohybem. Hodiny senzoru (`time_ms`) jdou
-  o −2200 ppm proti reálnému času.
-- `flow_status` je pořád 1 a `dis_status` pořád 1. Význam není zdokumentovaný, proto se na ně
-  nefiltruje.
-
-### 12.5 Co doladit
-
-1. **Nižší montáž.** Krok kvantování je úměrný výšce: ve 0,15 m by byl ~3 cm/s místo 7,8 cm/s,
-   minimum senzoru je 8 cm. To je největší páka na přesnost i mrtvou zónu.
-2. **Přisvícení a povrch.** Kvalita je kolem 100/255. Rovnoměrné LED přisvícení podlahy by mělo
-   omezit výpadky na hladkých nebo lesklých místech.
-3. **Výpadky vx.** Ověřit na jiné podlaze a při jízdě vpřed/vzad stejným místem, zda jde o povrch,
-   odlesk, nebo vlastnost senzoru.
-4. **Kalibrace** měřítek os a natočení na cílové podlaze. Teď je z jednoho záznamu: proti
-   nominální montáži zlepšuje vx z 18,9 na 16,6 mm/s.
-5. **Fúze přímo v zařízení.** Filtr potřebuje IMU (gyro pro rameno a akcelerometr). Na RPi by
-   stačilo připojit IMU a nahradit EMA v `estimator.py` Kalmanovým filtrem popsaným v 12.2.
+1. Senzor níž nad podlahu: rozlišení je úměrné výšce (minimum 8 cm).
+2. Přisvítit podlahu a ověřit výpadky na jiném povrchu.
+3. Kalibraci měřítek os udělat na cílové podlaze.
+4. Fúzi s IMU přenést do zařízení místo EMA v `estimator.py`.
