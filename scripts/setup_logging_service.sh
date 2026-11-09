@@ -5,6 +5,9 @@
 # brány je 255.255.255.255 "network unreachable"). Rámce zachytí TAP s HW časem
 # a rozparsuje je velocity_stack/scripts/tap_capture.py (typ "optical_flow").
 #
+# Broadcast nepotřebuje žádného příjemce ani ARP, takže RPi posílá i zapojené
+# jen do portu TAPu, za kterým nic není (TAP jen odposlouchává).
+#
 # UART smí mít otevřený jen jeden proces - pro kalibraci / sensor_node je
 # potřeba službu zastavit. Proto se účtu telnet menu (mtfop) povolí přes
 # sudoers jen start/stop/restart/status této jedné služby (příkaz
@@ -54,6 +57,16 @@ EOF
 visudo -cf "$SUDOERS.tmp"
 chmod 0440 "$SUDOERS.tmp"
 mv "$SUDOERS.tmp" "$SUDOERS"
+
+echo "== NetworkManager: eth0 drží IP a routu i bez linky (RPi zapojené jen do TAPu) =="
+cat > /etc/NetworkManager/conf.d/90-eth0-ignore-carrier.conf <<EOF
+# Logování přes TAP (RPi -> port TAPu, za ním nic): eth0 si drží statickou IP
+# a routu i bez carrieru, of-forward pak posílá broadcast, kdykoli je linka.
+[device-eth0-ignore-carrier]
+match-device=interface-name:eth0
+ignore-carrier=yes
+EOF
+nmcli general reload conf || true
 
 systemctl daemon-reload
 systemctl enable "$SERVICE.service"
